@@ -4,13 +4,11 @@ declare(strict_types=1);
 
 namespace Unish;
 
-use Drush\Commands\core\CoreCommands;
-use Drush\Commands\core\DrupalDirectoryCommands;
 use Drush\Commands\core\DrupalCommands;
+use Drush\Commands\core\DrupalDirectoryCommands;
 use Drush\Commands\pm\PmCommands;
 use Drush\Commands\pm\ThemeCommands;
 use Symfony\Component\Filesystem\Path;
-use Symfony\Component\Yaml\Yaml;
 
 /**
  * Tests for core commands.
@@ -23,7 +21,7 @@ class CoreTest extends UnishIntegrationTestCase
     {
         $root = $this->webroot();
         $options = [
-            'ignore' => 'cron,http requests,update,update_core,trusted_host_patterns', // no network access when running in tests, so ignore these
+            'ignore' => 'cron,http requests,update,coverage_core,update_core,trusted_host_patterns', // no network access when running in tests, so ignore these
         ];
         // Verify that there are no severity 2 items in the status report
         $this->drush(DrupalCommands::REQUIREMENTS, [], $options + ['severity' => '2', 'format' => 'json']);
@@ -82,7 +80,9 @@ class CoreTest extends UnishIntegrationTestCase
         $json = $this->getOutputFromJSON();
         $this->assertSame('/user/login', $json['path']);
         $this->assertSame('user.login', $json['name']);
-        $this->assertSame('\Drupal\user\Form\UserLoginForm', $json['defaults']['_form']);
+        // Core declares this route via a PHP attribute, so the class name has
+        // no leading backslash. Older core declared it in YAML, with one.
+        $this->assertSame('Drupal\user\Form\UserLoginForm', ltrim($json['defaults']['_form'], '\\'));
         $this->assertSame("FALSE", $json['requirements']['_user_is_logged_in']);
         $this->assertSame('access_check.user.login_status', $json['options']['_access_checks'][0]);
 

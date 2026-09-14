@@ -31,53 +31,7 @@ class DrupalDependenciesTest extends UnishIntegrationTestCase
             'no-only-installed' => null,
         ]);
 
-        // In Drupal 10, book, forum, statistics and tracker modules were part
-        // of Drupal core. Ensure a backwards compatible expectation.
-        // @todo Remove the BC layer when Drupal 10 support is dropped.
-        $expected = DeprecationHelper::backwardsCompatibleCall(
-            \Drupal::VERSION,
-            '11.0.0',
-            fn() => <<<EXPECTED
-                node
-                ├─dependent1
-                │ └─dependent2
-                │   ├─dependent3
-                │   └─dependent4
-                ├─dependent2
-                │ ├─dependent3
-                │ └─dependent4
-                ├─history
-                │ └─dependent1
-                │   └─dependent2 (circular)
-                └─taxonomy
-                  └─dependent1
-                    └─dependent2 (circular)
-                EXPECTED,
-            // @deprecated
-            fn() => <<<EXPECTED
-                node
-                ├─book
-                ├─dependent1
-                │ └─dependent2
-                │   ├─dependent3
-                │   └─dependent4
-                ├─dependent2
-                │ ├─dependent3
-                │ └─dependent4
-                ├─forum
-                ├─history
-                │ ├─dependent1
-                │ │ └─dependent2 (circular)
-                │ └─forum
-                ├─statistics
-                ├─taxonomy
-                │ ├─dependent1
-                │ │ └─dependent2 (circular)
-                │ └─forum
-                └─tracker
-                EXPECTED,
-        );
-        $this->assertSame($expected, $this->getOutput());
+        $this->assertSame($this->getModuleDependentOfUninstalledModuleExpectation(), $this->getOutput());
 
         // Install node module.
         $this->drush('pm:install', ['node']);
@@ -183,9 +137,7 @@ class DrupalDependenciesTest extends UnishIntegrationTestCase
         $expected = <<<EXPECTED
             node
             ├─core.entity_view_mode.node.full
-            ├─core.entity_view_mode.node.rss
-            ├─core.entity_view_mode.node.search_index
-            ├─core.entity_view_mode.node.search_result
+            ├─core.entity_view_mode.node.rss{$this->getNodeSearchExpectation()}
             ├─core.entity_view_mode.node.teaser
             ├─field.storage.node.body
             ├─system.action.node_delete_action
@@ -204,9 +156,7 @@ class DrupalDependenciesTest extends UnishIntegrationTestCase
         $expected = <<<EXPECTED
             node
             ├─core.entity_view_mode.node.full
-            ├─core.entity_view_mode.node.rss
-            ├─core.entity_view_mode.node.search_index
-            ├─core.entity_view_mode.node.search_result
+            ├─core.entity_view_mode.node.rss{$this->getNodeSearchExpectation()}
             ├─core.entity_view_mode.node.teaser
             ├─field.storage.node.body
             ├─field.storage.node.latin_name
@@ -263,5 +213,92 @@ class DrupalDependenciesTest extends UnishIntegrationTestCase
             // The modules were not installed.
         }
         parent::tearDown();
+    }
+
+    protected function getModuleDependentOfUninstalledModuleExpectation(): string
+    {
+        // In Drupal 10, book, forum, statistics and tracker modules were part
+        // of Drupal core. Ensure a backwards compatible expectation.
+        // @todo Remove the BC layer when Drupal 10 support is dropped.
+        return DeprecationHelper::backwardsCompatibleCall(
+            \Drupal::VERSION,
+            '11.0.0',
+            function (): string {
+                // Starting with 11.3.x the field.storage.node.body is no longer
+                // shipped but, for backwards compatibility reasons, a new and
+                // deprecated `node_storage_body_field` module is offered.
+                // @see https://www.drupal.org/node/3540814
+                // @todo Remove when 11.3.0 is the minimum Drupal requirement.
+                $nodeStorageBodyField = DeprecationHelper::backwardsCompatibleCall(
+                    \Drupal::VERSION,
+                    '11.3.0',
+                    function (): string {
+                        // As for 11.4.x, node search plugin node_search moved to
+                        // a submodule Search Node.
+                        // @see https://www.drupal.org/node/3590298
+                        return DeprecationHelper::backwardsCompatibleCall(
+                            \Drupal::VERSION,
+                            '11.4.0',
+                            fn(): string => "├─node_storage_body_field\n├─search_node\n",
+                            fn(): string => "├─node_storage_body_field\n",
+                        );
+                    },
+                    fn(): string => '',
+                );
+
+                return <<<EXPECTED
+                    node
+                    ├─dependent1
+                    │ └─dependent2
+                    │   ├─dependent3
+                    │   └─dependent4
+                    ├─dependent2
+                    │ ├─dependent3
+                    │ └─dependent4
+                    ├─history
+                    │ └─dependent1
+                    │   └─dependent2 (circular)
+                    {$nodeStorageBodyField}└─taxonomy
+                      └─dependent1
+                        └─dependent2 (circular)
+                    EXPECTED;
+            },
+            // @deprecated
+            fn(): string => <<<EXPECTED
+                node
+                ├─book
+                ├─dependent1
+                │ └─dependent2
+                │   ├─dependent3
+                │   └─dependent4
+                ├─dependent2
+                │ ├─dependent3
+                │ └─dependent4
+                ├─forum
+                ├─history
+                │ ├─dependent1
+                │ │ └─dependent2 (circular)
+                │ └─forum
+                ├─statistics
+                ├─taxonomy
+                │ ├─dependent1
+                │ │ └─dependent2 (circular)
+                │ └─forum
+                └─tracker
+                EXPECTED,
+        );
+    }
+
+    protected function getNodeSearchExpectation(): string
+    {
+        // As for 11.4.x, node search plugin node_search moved to a submodule
+        // Search Node.
+        // @see https://www.drupal.org/node/3590298
+        return DeprecationHelper::backwardsCompatibleCall(
+            \Drupal::VERSION,
+            '11.4.0',
+            fn(): string => '',
+            fn(): string => "\n├─core.entity_view_mode.node.search_index\n├─core.entity_view_mode.node.search_result",
+        );
     }
 }
